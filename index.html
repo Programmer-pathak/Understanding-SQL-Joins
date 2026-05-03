@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Interactive Learning Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    
+    <!-- Chosen Palette: Slate Backgrounds, Indigo Primary, Emerald Success, Rose Warning, White Cards -->
+    <!-- Application Structure Plan: The application is structured as an interactive educational dashboard with a sidebar navigation. This allows users to focus on one SQL concept (Joins, Views, Triggers) at a time without feeling overwhelmed. Each section contains a theoretical explanation followed by an interactive sandbox (dynamic tables, updatable views, and a real-time chart for triggers). This structure is chosen because SQL is best learned through 'cause and effect'—seeing how a query or action immediately changes the data. -->
+    <!-- Visualization & Content Choices: 
+         1. Joins -> Goal: Compare -> Viz: Dynamic HTML Tables -> Interaction: Dropdown to switch join types -> Justification: Directly shows how data rows merge or drop based on the join rule -> Method: Vanilla JS + HTML DOM. 
+         2. Views -> Goal: Organize/Change -> Viz: Side-by-side Tables -> Interaction: 'Update Grade' button -> Justification: Proves visually that updating a View updates the Base Table -> Method: Vanilla JS DOM updates.
+         3. Triggers -> Goal: Inform/Change -> Viz: Bar Chart -> Interaction: Payment Input -> Justification: Visually demonstrates the automated background calculation (Total - Paid = Due) -> Method: Chart.js dynamically updated via JS. 
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body { font-family: 'Outfit', sans-serif; background-color: #f8fafc; color: #0f172a; }
+        .code-font { font-family: 'JetBrains Mono', monospace; }
+        
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+            background: white;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .chart-container { height: 250px; }
+        }
+
+        .nav-item { cursor: pointer; transition: all 0.2s; }
+        .nav-item:hover, .nav-item.active { background-color: #e0e7ff; color: #4f46e5; border-right: 4px solid #4f46e5; font-weight: 600; }
+        
+        .section-content { display: none; animation: fadeIn 0.4s ease-in-out; }
+        .section-content.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 0.5rem; overflow: hidden; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1); }
+        th { background-color: #f1f5f9; text-align: left; padding: 0.75rem 1rem; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #e2e8f0; color: #334155; }
+        tr:last-child td { border-bottom: none; }
+        .highlight-row { background-color: #dcfce7 !important; transition: background-color 0.5s; }
+        .null-cell { color: #f43f5e; font-style: italic; }
+    </style>
+</head>
+<body class="h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <aside class="w-full md:w-64 bg-white shadow-xl flex flex-col z-10 flex-shrink-0">
+        <div class="p-6 border-b border-slate-200">
+            <h1 class="text-2xl font-bold text-indigo-600">SQL Mastery</h1>
+            <p class="text-sm text-slate-500 mt-1">Interactive Learning</p>
+        </div>
+        <nav class="flex-grow flex flex-col py-4 gap-2">
+            <div class="nav-item active px-6 py-3 text-slate-600" data-target="joins-section">
+                <span class="text-xl mr-2">&#128279;</span> 1. JOINS
+            </div>
+            <div class="nav-item px-6 py-3 text-slate-600" data-target="views-section">
+                <span class="text-xl mr-2">&#128444;</span> 2. VIEWS
+            </div>
+            <div class="nav-item px-6 py-3 text-slate-600" data-target="triggers-section">
+                <span class="text-xl mr-2">&#9881;</span> 3. TRIGGERS
+            </div>
+        </nav>
+        <div class="p-6 bg-slate-50 border-t border-slate-200 text-xs text-slate-400">
+            Beginner Friendly Guide
+        </div>
+    </aside>
+
+    <main class="flex-grow p-6 md:p-10 overflow-y-auto">
+
+        <section id="joins-section" class="section-content active">
+            <div class="max-w-6xl mx-auto">
+                <h2 class="text-4xl font-bold text-slate-800 mb-4">Understanding SQL Joins</h2>
+                <p class="text-lg text-slate-600 mb-8 leading-relaxed">
+                    Joins are used to combine rows from two or more tables, based on a related column between them. 
+                    In this interactive playground, we have a <strong>Students</strong> table and a <strong>Departments</strong> table. 
+                    Select a Join type below to see how the database connects them.
+                </p>
+
+                <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-6 mb-8 flex flex-col sm:flex-row items-center gap-6">
+                    <label for="join-selector" class="font-semibold text-indigo-900 text-lg">Select Join Type:</label>
+                    <select id="join-selector" class="flex-grow max-w-md p-3 rounded-lg border-2 border-indigo-300 bg-white text-lg font-medium focus:outline-none focus:border-indigo-600 transition-colors">
+                        <option value="inner">INNER JOIN (Only Matches)</option>
+                        <option value="left">LEFT JOIN (All Students + Matches)</option>
+                        <option value="right">RIGHT JOIN (All Departments + Matches)</option>
+                        <option value="full">FULL JOIN (Everything)</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <div>
+                        <h3 class="font-bold text-slate-700 mb-3 bg-slate-200 inline-block px-3 py-1 rounded">Table 1: Students</h3>
+                        <table id="table-students">
+                            <thead><tr><th>SID</th><th>Name</th><th>DeptID</th></tr></thead>
+                            <tbody>
+                                <tr><td>1</td><td>Aman</td><td>10</td></tr>
+                                <tr><td>2</td><td>Rahul</td><td>20</td></tr>
+                                <tr><td>3</td><td>Priya</td><td class="null-cell">NULL</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-700 mb-3 bg-slate-200 inline-block px-3 py-1 rounded">Table 2: Departments</h3>
+                        <table id="table-depts">
+                            <thead><tr><th>DeptID</th><th>DeptName</th></tr></thead>
+                            <tbody>
+                                <tr><td>10</td><td>Computer Science</td></tr>
+                                <tr><td>20</td><td>Mechanical</td></tr>
+                                <tr><td>30</td><td>Electronics</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
+                    <h3 class="text-2xl font-bold text-indigo-600 mb-2 border-b-2 border-indigo-100 pb-2 flex items-center gap-2">
+                        <span>&#9889;</span> Resulting Query Output
+                    </h3>
+                    <p id="join-explanation" class="text-slate-600 mb-4 italic code-font"></p>
+                    <div class="overflow-x-auto">
+                        <table id="table-result">
+                            <thead><tr><th>Student Name</th><th>Department Name</th></tr></thead>
+                            <tbody id="result-tbody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="views-section" class="section-content">
+            <div class="max-w-6xl mx-auto">
+                <h2 class="text-4xl font-bold text-slate-800 mb-4">Database Views: Virtual Windows</h2>
+                <p class="text-lg text-slate-600 mb-8 leading-relaxed">
+                    A View is a virtual table based on the result-set of an SQL statement. 
+                    It doesn't store data itself; it just looks at the base table. 
+                    Crucially, for simple views, <strong>updating the view directly updates the underlying base table.</strong>
+                </p>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                    
+                    <div class="bg-white p-6 rounded-xl shadow border border-slate-200">
+                        <h3 class="text-xl font-bold text-slate-700 mb-2">Base Table: <code>Students</code></h3>
+                        <p class="text-sm text-slate-500 mb-4">The actual physical data stored on the hard drive.</p>
+                        <table>
+                            <thead><tr><th>SID</th><th>Name</th><th>Dept</th><th>CGPA</th></tr></thead>
+                            <tbody id="base-students-body">
+                                <tr id="base-row-101"><td>101</td><td>Aman</td><td>CS</td><td class="font-bold code-font text-indigo-600">8.5</td></tr>
+                                <tr><td>102</td><td>Priya</td><td>EE</td><td class="code-font">7.2</td></tr>
+                                <tr><td>103</td><td>Rahul</td><td>ME</td><td class="code-font">9.1</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow border-2 border-indigo-200 relative">
+                        <div class="absolute -left-5 top-1/2 transform -translate-y-1/2 bg-indigo-500 text-white rounded-full w-10 h-10 flex items-center justify-center text-xl shadow-lg hidden lg:flex">
+                            &#8594;
+                        </div>
+                        <h3 class="text-xl font-bold text-indigo-700 mb-2">View: <code>TopStudents</code></h3>
+                        <p class="text-sm text-slate-500 mb-4 code-font">CREATE VIEW TopStudents AS SELECT * FROM Students WHERE CGPA > 8.0;</p>
+                        <table>
+                            <thead><tr><th>SID</th><th>Name</th><th>Dept</th><th>CGPA</th></tr></thead>
+                            <tbody id="view-students-body">
+                                <tr id="view-row-101"><td>101</td><td>Aman</td><td>CS</td><td class="font-bold code-font text-indigo-600">8.5</td></tr>
+                                <tr><td>103</td><td>Rahul</td><td>ME</td><td class="code-font">9.1</td></tr>
+                            </tbody>
+                        </table>
+
+                        <div class="mt-6 p-4 bg-indigo-50 rounded-lg">
+                            <p class="font-semibold text-indigo-900 mb-3">Action: Update via View</p>
+                            <button id="btn-update-view" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded transition-colors shadow flex justify-center items-center gap-2">
+                                <span>&#9998;</span> UPDATE TopStudents SET CGPA = 9.5 WHERE Name = 'Aman'
+                            </button>
+                            <p id="view-success-msg" class="text-emerald-600 font-semibold mt-3 text-center hidden">
+                                &#10004; Success! Notice how BOTH tables updated instantly.
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section id="triggers-section" class="section-content">
+            <div class="max-w-6xl mx-auto">
+                <h2 class="text-4xl font-bold text-slate-800 mb-4">Triggers: Automated Actions</h2>
+                <p class="text-lg text-slate-600 mb-8 leading-relaxed">
+                    A Trigger is SQL code that automatically runs when an event (INSERT, UPDATE, DELETE) occurs. 
+                    In this Hospital Billing scenario, we have a trigger that automatically calculates the <code>DueAmount</code> 
+                    whenever a new payment (<code>PaidAmount</code>) is updated.
+                </p>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    
+                    <div class="flex flex-col gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow border border-slate-200">
+                            <h3 class="text-xl font-bold text-slate-700 mb-4 flex justify-between items-center">
+                                Patient: Arjun (PID: 552)
+                                <span class="bg-slate-100 text-slate-600 text-sm px-2 py-1 rounded">Total Bill: $5000</span>
+                            </h3>
+                            
+                            <table class="mb-6">
+                                <thead><tr><th>TotalAmount</th><th>PaidAmount</th><th class="text-rose-600">DueAmount</th></tr></thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="code-font">$5000</td>
+                                        <td class="code-font text-emerald-600" id="td-paid">$1000</td>
+                                        <td class="code-font font-bold text-rose-600" id="td-due">$4000</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <div class="bg-slate-50 p-4 rounded border border-slate-200">
+                                <label class="block text-sm font-bold text-slate-700 mb-2">Make a Payment:</label>
+                                <div class="flex gap-2">
+                                    <span class="inline-flex items-center px-3 text-sm text-slate-900 bg-slate-200 border border-r-0 border-slate-300 rounded-l-md">$</span>
+                                    <input type="number" id="payment-input" class="rounded-none rounded-r-lg bg-white border border-slate-300 text-slate-900 focus:ring-emerald-500 focus:border-emerald-500 block flex-1 min-w-0 w-full text-lg p-2.5" placeholder="Enter amount" value="1500" min="1" max="4000">
+                                    <button id="btn-pay" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded shadow transition-colors">
+                                        Pay Now
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-800 text-emerald-400 p-5 rounded-xl shadow font-mono text-sm overflow-x-auto">
+                            <p class="text-slate-400 mb-2 italic">-- The hidden Trigger logic executing in background</p>
+                            <p>CREATE TRIGGER UpdateDue ON Billing</p>
+                            <p>AFTER UPDATE AS</p>
+                            <p>BEGIN</p>
+                            <p class="ml-4">UPDATE Billing</p>
+                            <p class="ml-4">SET <span class="text-white bg-slate-700 px-1">DueAmount = TotalAmount - PaidAmount</span></p>
+                            <p class="ml-4">WHERE PID IN (SELECT PID FROM inserted);</p>
+                            <p>END;</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow border border-slate-200 flex flex-col">
+                        <h3 class="text-xl font-bold text-slate-700 mb-2">Visualizing the Balance</h3>
+                        <p class="text-sm text-slate-500 mb-4">Watch the Due Amount shrink automatically as the Paid Amount increases.</p>
+                        
+                        <div class="flex-grow flex items-center justify-center w-full">
+                            <div class="chart-container">
+                                <canvas id="billingChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        const navItems = document.querySelectorAll('.nav-item');
+        const sections = document.querySelectorAll('.section-content');
+
+        navItems.forEach(item => {
+            item.addEventListener('click', () => {
+                navItems.forEach(n => n.classList.remove('active'));
+                sections.forEach(s => s.classList.remove('active'));
+                
+                item.classList.add('active');
+                const targetId = item.getAttribute('data-target');
+                document.getElementById(targetId).classList.add('active');
+            });
+        });
+
+        const students = [
+            { id: 1, name: 'Aman', dept: 10 },
+            { id: 2, name: 'Rahul', dept: 20 },
+            { id: 3, name: 'Priya', dept: null }
+        ];
+
+        const departments = {
+            10: 'Computer Science',
+            20: 'Mechanical',
+            30: 'Electronics'
+        };
+
+        const joinSelector = document.getElementById('join-selector');
+        const resultTbody = document.getElementById('result-tbody');
+        const joinExplanation = document.getElementById('join-explanation');
+
+        function renderJoin() {
+            const type = joinSelector.value;
+            resultTbody.innerHTML = '';
+            
+            let results = [];
+            let text = '';
+
+            if (type === 'inner') {
+                text = "SELECT S.Name, D.DeptName FROM Students S INNER JOIN Departments D ON S.DeptID = D.DeptID;";
+                students.forEach(s => {
+                    if (s.dept && departments[s.dept]) {
+                        results.push({ name: s.name, dept: departments[s.dept] });
+                    }
+                });
+            } else if (type === 'left') {
+                text = "SELECT S.Name, D.DeptName FROM Students S LEFT JOIN Departments D ON S.DeptID = D.DeptID;";
+                students.forEach(s => {
+                    results.push({ name: s.name, dept: (s.dept && departments[s.dept]) ? departments[s.dept] : 'NULL' });
+                });
+            } else if (type === 'right') {
+                text = "SELECT S.Name, D.DeptName FROM Students S RIGHT JOIN Departments D ON S.DeptID = D.DeptID;";
+                students.forEach(s => {
+                    if (s.dept && departments[s.dept]) {
+                        results.push({ name: s.name, dept: departments[s.dept] });
+                    }
+                });
+                results.push({ name: 'NULL', dept: departments[30] });
+            } else if (type === 'full') {
+                text = "SELECT S.Name, D.DeptName FROM Students S FULL OUTER JOIN Departments D ON S.DeptID = D.DeptID;";
+                students.forEach(s => {
+                    results.push({ name: s.name, dept: (s.dept && departments[s.dept]) ? departments[s.dept] : 'NULL' });
+                });
+                results.push({ name: 'NULL', dept: departments[30] });
+            }
+
+            joinExplanation.innerText = text;
+
+            if (results.length === 0) {
+                resultTbody.innerHTML = '<tr><td colspan="2" class="text-center text-slate-500 py-4">No matching records found.</td></tr>';
+                return;
+            }
+
+            results.forEach(r => {
+                const tr = document.createElement('tr');
+                const nameClass = r.name === 'NULL' ? 'null-cell' : 'font-medium';
+                const deptClass = r.dept === 'NULL' ? 'null-cell' : '';
+                tr.innerHTML = `<td class="${nameClass}">${r.name}</td><td class="${deptClass}">${r.dept}</td>`;
+                resultTbody.appendChild(tr);
+            });
+        }
+
+        joinSelector.addEventListener('change', renderJoin);
+        renderJoin();
+
+        const btnUpdateView = document.getElementById('btn-update-view');
+        btnUpdateView.addEventListener('click', () => {
+            const baseCell = document.querySelector('#base-row-101 td:nth-child(4)');
+            const viewCell = document.querySelector('#view-row-101 td:nth-child(4)');
+            
+            baseCell.innerText = '9.5';
+            viewCell.innerText = '9.5';
+            
+            const baseRow = document.getElementById('base-row-101');
+            const viewRow = document.getElementById('view-row-101');
+            
+            baseRow.classList.add('highlight-row');
+            viewRow.classList.add('highlight-row');
+            
+            document.getElementById('view-success-msg').classList.remove('hidden');
+            btnUpdateView.disabled = true;
+            btnUpdateView.classList.add('opacity-50', 'cursor-not-allowed');
+            
+            setTimeout(() => {
+                baseRow.classList.remove('highlight-row');
+                viewRow.classList.remove('highlight-row');
+            }, 1500);
+        });
+
+        let billingData = { total: 5000, paid: 1000, due: 4000 };
+        const ctx = document.getElementById('billingChart').getContext('2d');
+        
+        let billingChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Billing Status'],
+                datasets: [
+                    {
+                        label: 'Paid Amount ($)',
+                        data: [billingData.paid],
+                        backgroundColor: '#10b981',
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Due Amount ($)',
+                        data: [billingData.due],
+                        backgroundColor: '#f43f5e',
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { stacked: true },
+                    y: { 
+                        stacked: true, 
+                        beginAtZero: true, 
+                        max: 5000,
+                        grid: { color: '#e2e8f0' }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        mode: 'index',
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) { label += ': '; }
+                                if (context.parsed.y !== null) { label += '$' + context.parsed.y; }
+                                return label;
+                            }
+                        }
+                    },
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+
+        const btnPay = document.getElementById('btn-pay');
+        const paymentInput = document.getElementById('payment-input');
+        const tdPaid = document.getElementById('td-paid');
+        const tdDue = document.getElementById('td-due');
+
+        btnPay.addEventListener('click', () => {
+            const amount = parseInt(paymentInput.value);
+            if (isNaN(amount) || amount <= 0) return;
+
+            if (amount > billingData.due) {
+                alert("Payment cannot exceed Due Amount!");
+                return;
+            }
+
+            billingData.paid += amount;
+            
+            billingData.due = billingData.total - billingData.paid;
+
+            tdPaid.innerText = '$' + billingData.paid;
+            tdDue.innerText = '$' + billingData.due;
+            
+            tdDue.parentElement.classList.add('highlight-row');
+            setTimeout(() => {
+                tdDue.parentElement.classList.remove('highlight-row');
+            }, 1000);
+
+            billingChart.data.datasets[0].data = [billingData.paid];
+            billingChart.data.datasets[1].data = [billingData.due];
+            billingChart.update();
+
+            paymentInput.value = '';
+            paymentInput.max = billingData.due;
+            
+            if(billingData.due === 0) {
+                btnPay.disabled = true;
+                btnPay.innerText = "Fully Paid";
+                btnPay.classList.replace('bg-emerald-600', 'bg-slate-400');
+                btnPay.classList.replace('hover:bg-emerald-700', 'hover:bg-slate-400');
+                paymentInput.disabled = true;
+            }
+        });
+
+    </script>
+</body>
+</html>
